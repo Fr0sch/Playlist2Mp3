@@ -106,7 +106,29 @@ class Playlist2Mp3Window(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("playlist2mp3")
-        self.resize(860, 620)
+        self.resize(860, 600)
+        self.setStyleSheet("""
+            QMainWindow { background: #151515; }
+            QWidget { color: #d9d9d9; font-family: 'Segoe UI', Arial, sans-serif; font-size: 9pt; }
+            QLineEdit { background: #1f1f1f; border: 1px solid #2b2b2b; border-radius: 3px; padding: 4px 6px; }
+            QComboBox { background: #1f1f1f; border: 1px solid #2b2b2b; border-radius: 3px; padding: 4px 6px; }
+            QListWidget { background: #191919; border: 1px solid #282828; border-radius: 3px; }
+            QListWidget::item { padding: 3px 6px; }
+            QListWidget::item:selected { background: #2f2f2f; }
+            QPushButton { background: #232323; border: 1px solid #333333; border-radius: 3px; padding: 5px 12px; }
+            QPushButton:hover { background: #2a2a2a; }
+            QPushButton:pressed { background: #1c1c1c; }
+            QPushButton:disabled { color: #6a6a6a; }
+            QGroupBox { border: 1px solid #282828; border-radius: 3px; margin-top: 10px; padding: 8px; }
+            QGroupBox::title { subcontrol-origin: margin; left: 8px; padding: 0 4px; color: #b8b8b8; }
+            QCheckBox { spacing: 6px; }
+            QCheckBox::indicator { width: 13px; height: 13px; border: 1px solid #3a3a3a; background: #1f1f1f; }
+            QCheckBox::indicator:checked { background: #b8b8b8; }
+            QProgressBar { background: #1f1f1f; border: 1px solid #2b2b2b; height: 6px; text-align: center; }
+            QProgressBar::chunk { background: #8f8f8f; }
+            QPlainTextEdit { background: #171717; border: 1px solid #282828; border-radius: 3px; }
+            QLabel { color: #d9d9d9; }
+        """)
         self.info = None
         self.url = ""
         self.no_playlist = False
@@ -116,8 +138,11 @@ class Playlist2Mp3Window(QMainWindow):
         root = QWidget()
         self.setCentralWidget(root)
         layout = QVBoxLayout(root)
+        layout.setContentsMargins(14, 14, 14, 14)
+        layout.setSpacing(10)
 
         row = QHBoxLayout()
+        row.setSpacing(8)
         self.url_edit = QLineEdit()
         self.url_edit.setPlaceholderText("YouTube or Spotify URL")
         self.url_edit.returnPressed.connect(self.action_load)
@@ -137,6 +162,7 @@ class Playlist2Mp3Window(QMainWindow):
 
         opts = QGroupBox("Options")
         grid = QHBoxLayout(opts)
+        grid.setSpacing(10)
 
         self.mode = QComboBox()
         self.mode.addItem("Playlist", "playlist")
@@ -153,19 +179,15 @@ class Playlist2Mp3Window(QMainWindow):
         browse_btn.clicked.connect(self.choose_output)
 
         self.start_num = QLineEdit()
-        self.start_num.setPlaceholderText("Start # (e.g. 1)")
-        self.start_num.setFixedWidth(80)
+        self.start_num.setPlaceholderText("Start #")
+        self.start_num.setFixedWidth(70)
 
-        self.prefix_edit = QLineEdit()
-        self.prefix_edit.setPlaceholderText("#1-50_ or #1_")
-        self.prefix_edit.setFixedWidth(120)
-
-        self.flat = QCheckBox("Flat (no subfolders)")
-        self.tags = QCheckBox("Embed tags")
+        self.flat = QCheckBox("Flat")
+        self.tags = QCheckBox("Tags")
         self.tags.setChecked(True)
-        self.cover = QCheckBox("Embed cover art")
+        self.cover = QCheckBox("Cover")
         self.cover.setChecked(True)
-        self.archive = QCheckBox("Skip existing (archive)")
+        self.archive = QCheckBox("Skip existing")
         self.archive.setChecked(True)
 
         grid.addWidget(QLabel("Mode:"))
@@ -174,20 +196,20 @@ class Playlist2Mp3Window(QMainWindow):
         grid.addWidget(self.bitrate)
         grid.addWidget(QLabel("Start #:"))
         grid.addWidget(self.start_num)
-        grid.addWidget(QLabel("Prefix/Range:"))
-        grid.addWidget(self.prefix_edit)
         grid.addWidget(QLabel("Output:"))
         grid.addWidget(self.output_edit, 1)
         grid.addWidget(browse_btn)
         layout.addWidget(opts)
 
         checks = QHBoxLayout()
+        checks.setSpacing(14)
         for widget in (self.flat, self.tags, self.cover, self.archive):
             checks.addWidget(widget)
         checks.addStretch(1)
         layout.addLayout(checks)
 
         actions = QHBoxLayout()
+        actions.setSpacing(8)
         select_all = QPushButton("Select all")
         select_all.clicked.connect(self.select_all)
         select_none = QPushButton("Select none")
@@ -224,7 +246,7 @@ class Playlist2Mp3Window(QMainWindow):
         except Exception:
             pass
         for widget in (self.url_edit, self.mode, self.bitrate, self.flat,
-                       self.tags, self.cover, self.archive, self.start_num, self.prefix_edit):
+                       self.tags, self.cover, self.archive, self.start_num):
             widget.setEnabled(not busy)
 
     def on_mode_changed(self, _index):
@@ -261,7 +283,7 @@ class Playlist2Mp3Window(QMainWindow):
         s.no_tags = not self.tags.isChecked()
         s.no_thumbnail = not self.cover.isChecked()
         s.no_archive = not self.archive.isChecked()
-        s.filename_prefix = self.prefix_edit.text().strip() or None
+        s.filename_prefix = None
         try:
             if self.start_num.text().strip():
                 s.track_offset = int(self.start_num.text().strip()) - 1
@@ -438,7 +460,6 @@ class Playlist2Mp3Window(QMainWindow):
         try:
             settings = self.make_settings()
             offset = getattr(settings, 'track_offset', None)
-            prefix = getattr(settings, 'filename_prefix', None)
             base = settings.output
             for fname in os.listdir(base):
                 if fname.endswith('.mp3'):
@@ -453,18 +474,7 @@ class Playlist2Mp3Window(QMainWindow):
                         if num < 1:
                             num = 1
                         rest = m.group(2)
-                        if prefix:
-                            newn = os.path.join(base, prefix + rest)
-                        else:
-                            newn = os.path.join(base, '#%02d_%s' % (num, rest))
-                        try:
-                            if old != newn:
-                                os.rename(old, newn)
-                        except Exception:
-                            pass
-                        continue
-                    if prefix and not fname.startswith(prefix):
-                        newn = os.path.join(base, prefix + fname)
+                        newn = os.path.join(base, '#%02d_%s' % (num, rest))
                         try:
                             if old != newn:
                                 os.rename(old, newn)
