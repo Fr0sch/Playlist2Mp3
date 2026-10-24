@@ -1,0 +1,45 @@
+name: build-gui
+
+on:
+  push:
+    branches: ["main"]
+  workflow_dispatch:
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            artifact: playlist2mp3-gui-linux
+            path: dist/playlist2mp3-gui
+          - os: windows-latest
+            artifact: playlist2mp3-gui-windows
+            path: dist/playlist2mp3-gui.exe
+          # macos-14 runners are Apple Silicon (arm64).
+          - os: macos-14
+            artifact: playlist2mp3-gui-macos-arm64
+            path: dist/playlist2mp3-gui.app
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install build deps
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements-dev.txt
+
+      - name: Build with PyInstaller
+        run: python -m PyInstaller --noconfirm packaging/playlist2mp3-gui.spec
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: ${{ matrix.path }}
+          if-no-files-found: error

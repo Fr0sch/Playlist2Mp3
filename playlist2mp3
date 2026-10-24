@@ -1,0 +1,771 @@
+#!/usr/bin/env python3
+"""playlist2mp3 - convert YouTube/Spotify playlists to tagged MP3.
+
+CLI + Textual TUI frontend; the shared download logic lives in p2m_core.py
+(imported here). Run without arguments (or with --tui) for the TUI, pair with
+an optional --song/--no-album-fallback flag, or point playlist2mp3_gui.py at
+the same p2m_core for a full Qt desktop app.
+"""
+
+import argparse
+import os
+import sys
+from types import SimpleNamespace
+
+sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
+from p2m_core import *  # noqa: E402,F401,F403
+
+
+def cli_info(info):
+    total = 0
+    for i, e in enumerate(info["entries"], 1):
+        name = e["title"]
+        if e.get("artist"):
+            name = "%s - %s" % (e["artist"], name)
+        try:
+            total += e["duration"] or 0
+        except TypeError:
+            pass
+        dur = human_duration(e["duration"])
+        print("  %2d. %-60s %s" % (i, name[:60], dur))
+    if total:
+        print("Total length: %s" % human_duration(total))
+
+
+def spotify_label(kind):
+    return {"playlist": "Playlist", "album": "Album", "track": "Song"}[kind]
+
+
+def make_spotify_settings(base, args):
+    return SimpleNamespace(
+        output=base, quality=args.quality, flat=args.flat,
+        no_playlist=False, no_tags=args.no_tags,
+        no_thumbnail=args.no_thumbnail, no_archive=args.no_archive,
+        limit=args.limit, start=args.start, end=args.end,
+        playlist_items=None, fragments=args.fragments,
+        cookies_from_browser=None, verbose=args.verbose,
+    )
+
+
+def run_spotify_cli(args, kind):
+    require_spotdl()
+    require("ffmpeg")
+
+    base = os.path.abspath(os.path.expanduser(args.output))
+    info = spotify_probe(args.url, kind)
+
+    print("%s: %s" % (spotify_label(kind), info["title"]))
+    print("Tracks: %d" % info["count"])
+
+    if args.info:
+        cli_info(info)
+        return 0
+
+    if args.dry_run:
+        for i, e in enumerate(info["entries"], 1):
+            print("  %2d. %s" % (i, e["title"]))
+        print("Would convert to: %s" % base)
+        return 0
+
+    if not os.path.isdir(base):
+        try:
+            os.makedirs(base, exist_ok=True)
+        except OSError as exc:
+            die("cannot create output directory %s: %s" % (base, exc))
+    if not os.access(base, os.W_OK):
+        die("output directory is not writable: " + base)
+
+    songs = info["songs"]
+    lo = (args.start or 1) - 1
+    hi = args.end or len(songs)
+    if args.limit:
+        hi = min(hi, lo + args.limit)
+    subset = songs[lo:hi]
+
+    if lo == 0 and len(subset) == len(songs):
+        sources, tkind = [args.url], kind
+    else:
+        sources, tkind = [s["url"] for s in subset], "track"
+
+    settings = make_spotify_settings(base, args)
+    archive = os.path.join(base, SPOTIFY_ARCHIVE_NAME)
+    cmd = build_spotify_cmd(settings, sources, tkind, base, archive)
+
+    print("Output: %s" % base)
+    print("MP3 bitrate: %d kbps" % args.quality)
+    print("Skip existing: %s" % ("no" if args.no_archive else "yes"))
+    print("-" * 60)
+    print("Running spotdl...", flush=True)
+
+    done, failed, rc = stream_spotify(cmd, on_line=print)
+    print("-" * 60)
+    expected = len(sources)
+    if failed and not done:
+        if len(subset) == 1 and not args.no_album_fallback:
+            print("Not matched on YouTube; trying album fallback "
+                  "(cutting from a full-album upload)...", flush=True)
+            if album_fallback_track(subset[0], settings, base, log=print):
+                print("-" * 60)
+                print("Done. 1 track downloaded via album fallback.")
+                return 0
+            print("Album fallback did not find a usable source.")
+        print("Nothing downloaded: %d track(s) could not be matched on "
+              "YouTube." % failed)
+        print("Some tracks (e.g. intros/interludes, or non-video releases) "
+              "exist only inside a full-album upload and cannot be fetched "
+              "as standalone files. Try the album or playlist link instead.")
+        return 1
+    print("Done. %d track(s) downloaded, %d error(s)." % (done, failed))
+    if rc != 0 and done == 0:
+        return rc
+    if done == 0 and expected:
+        print("Nothing new downloaded (already present, or not found).")
+    return 0
+
+
+def run_cli(args):
+    if getattr(args, 'update', False):
+        import subprocess
+        here = os.path.dirname(os.path.abspath(__file__))
+        r = subprocess.run(["git", "-C", here, "pull", "--ff-only"])
+        if r.returncode == 0:
+            print("Updated.")
+        else:
+            print("Update failed or not a git repo.")
+        return r.returncode
+
+    kind = spotify_kind(args.url)
+    if kind:
+        return run_spotify_cli(args, kind)
+
+    require("yt-dlp")
+    require("ffmpeg")
+
+    base = os.path.abspath(os.path.expanduser(args.output))
+    info = probe(args.url, args.cookies_from_browser,
+                 no_playlist=args.song)
+
+    kind = "Song" if args.song else ("Playlist" if info["is_playlist"]
+                                     else "Video")
+    print("%s: %s" % (kind, info["title"]))
+    print("Tracks: %d" % info["count"])
+
+    if args.info:
+        cli_info(info)
+        return 0
+
+    if args.dry_run:
+        for i, e in enumerate(info["entries"], 1):
+            print("  %2d. %s" % (i, e["title"]))
+        print("Would convert to: %s" % base)
+        return 0
+
+    if not os.path.isdir(base):
+        try:
+            os.makedirs(base, exist_ok=True)
+        except OSError as exc:
+            die("cannot create output directory %s: %s" % (base, exc))
+    if not os.access(base, os.W_OK):
+        die("output directory is not writable: " + base)
+
+    settings = SimpleNamespace(
+        output=base, quality=args.quality, flat=args.flat,
+        no_playlist=args.song,
+        no_tags=args.no_tags, no_thumbnail=args.no_thumbnail,
+        no_archive=args.no_archive, limit=args.limit, start=args.start,
+        end=args.end, playlist_items=None, fragments=args.fragments,
+        cookies_from_browser=args.cookies_from_browser, verbose=args.verbose,
+        filename_prefix=getattr(args, 'prefix', None),
+        track_offset=(args.track_offset if args.track_offset is not None else ((args.track_start - 1) if getattr(args, 'track_start', None) else None)),
+    )
+    archive = os.path.join(base, ARCHIVE_NAME)
+    cmd = build_download_cmd(settings, args.url, info, base, archive)
+
+    print("Output: %s" % base)
+    print("MP3 bitrate: %d kbps" % args.quality)
+    print("Skip existing: %s" % ("no" if args.no_archive else "yes"))
+    print("Cover art: %s" % ("no" if args.no_thumbnail else "yes"))
+    print("-" * 60)
+    print("Running yt-dlp...", flush=True)
+
+    done, failed, rc = stream_download(cmd, on_line=print)
+    print("-" * 60)
+    try:
+        pfx = getattr(settings, 'filename_prefix', None)
+        offset = getattr(settings, 'track_offset', None)
+        import re as _re
+        for fname in os.listdir(base):
+            if fname.endswith('.mp3'):
+                old = os.path.join(base, fname)
+                m = _re.match(r'^#(\d+)_(.+)$', fname)
+                if m:
+                    num = int(m.group(1))
+                    if offset:
+                        num = num + offset
+                    if num > 50:
+                        num = ((num - 1) % 50) + 1
+                    if num < 1:
+                        num = 1
+                    rest = m.group(2)
+                    if pfx:
+                        newn = os.path.join(base, pfx + rest)
+                    else:
+                        newn = os.path.join(base, '#%02d_%s' % (num, rest))
+                    try:
+                        if old != newn:
+                            os.rename(old, newn)
+                    except Exception:
+                        pass
+                    continue
+                if pfx and not fname.startswith(pfx):
+                    newn = os.path.join(base, pfx + fname)
+                    try:
+                        if old != newn:
+                            os.rename(old, newn)
+                    except Exception:
+                        pass
+    except Exception:
+        pass
+    print("Done. %d track(s) converted, %d error(s)." % (done, failed))
+    if rc != 0 and done == 0:
+        return rc
+    return 0
+
+
+# ---------------------------------------------------------------------------
+# TUI (Textual) - imported lazily so the CLI works without textual installed
+# ---------------------------------------------------------------------------
+
+def build_tui_app():
+    """Build and return the Textual App class (lazy import)."""
+    try:
+        from textual.app import App
+        from textual.containers import Horizontal, Vertical
+        from textual.widgets import (
+            Button, Footer, Header, Input, Label, ProgressBar, RichLog,
+            Select, SelectionList, Static, Switch,
+        )
+        from textual.widgets.selection_list import Selection
+        from textual import work
+    except ImportError:
+        die("the TUI needs the 'textual' package "
+            "(install: pacman -S python-textual); or pass a URL on the CLI")
+
+    class Playlist2mp3App(App):
+        CSS = """
+        Screen { layout: vertical; background: $surface; }
+
+        #toolbar { height: auto; border: round $accent; padding: 0 1; }
+        #url { width: 1fr; }
+        #load { width: 12; margin-left: 1; }
+
+        #status { height: auto; padding: 0 2; color: $text-muted; }
+
+        #tracks { height: 1fr; border: round $primary; padding: 0 1; }
+
+        #options { height: auto; border: round $secondary; padding: 1 2; }
+        #options .opt { height: auto; width: auto; margin-right: 3; }
+        #options .opt Label { color: $text-muted; text-style: bold; }
+        #options .opt.-output { width: 1fr; }
+        #options Select { width: 18; }
+        #options Input { width: 12; }
+
+        #actions { height: auto; padding: 0 1; }
+        #actions Button { margin-right: 1; }
+
+        #progress { height: auto; padding: 0 1; }
+
+        #log { height: 28%; border: round $secondary; padding: 0 1; }
+        """
+
+        BINDINGS = [
+            ("q", "quit", "Quit"),
+            ("ctrl+r", "reload", "Reload URL"),
+            ("a", "select_all", "All"),
+            ("n", "select_none", "None"),
+            ("d", "download", "Download"),
+        ]
+
+        def __init__(self):
+            super().__init__()
+            self.info = None
+            self.downloading = False
+            self.no_playlist = False
+            self.spotify_fallback = None
+
+        def compose(self):
+            yield Header(show_clock=True)
+            with Horizontal(id="toolbar"):
+                yield Input(placeholder="YouTube or Spotify URL", id="url")
+                yield Button("Load", id="load", variant="primary")
+            yield Static("Paste a URL and press Load.", id="status")
+            yield SelectionList(id="tracks")
+            with Horizontal(id="options"):
+                with Vertical(classes="opt"):
+                    yield Label("Bitrate")
+                    yield Select([(str(q) + " kbps", q) for q in QUALITIES],
+                                 value=DEFAULT_BITRATE, id="quality",
+                                 allow_blank=False)
+                with Vertical(classes="opt -output"):
+                    yield Label("Output folder")
+                    yield Input(value=os.path.expanduser("~/Music"), id="output",
+                                placeholder="output folder")
+                with Vertical(classes="opt"):
+                    yield Label("Start #")
+                    yield Input(placeholder="1", id="startnum")
+                with Vertical(classes="opt"):
+                    yield Label("Prefix/Range")
+                    yield Input(placeholder="#1-50_", id="prefix")
+                with Vertical(classes="opt"):
+                    yield Label("Mode")
+                    yield Select([("Playlist", "playlist"), ("Song", "song")],
+                                 value="playlist", id="mode", allow_blank=False)
+                with Vertical(classes="opt"):
+                    yield Label("Tags")
+                    yield Switch(id="tags", value=True)
+                with Vertical(classes="opt"):
+                    yield Label("Cover")
+                    yield Switch(id="thumb", value=True)
+                with Vertical(classes="opt"):
+                    yield Label("Flat")
+                    yield Switch(id="flat", value=False)
+            with Horizontal(id="actions"):
+                yield Button("Select all", id="all")
+                yield Button("Select none", id="none")
+                yield Button("Download", id="download", variant="success")
+                yield Button("Update", id="update")
+            yield ProgressBar(id="progress", show_eta=True)
+            yield RichLog(id="log", highlight=False, markup=True, wrap=True)
+            yield Footer()
+
+        def on_mount(self):
+            self.title = "playlist2mp3"
+            self.sub_title = "YouTube to tagged MP3"
+            self.query_one("#toolbar").border_title = "Source"
+            self.query_one("#options").border_title = "Options"
+            self.query_one("#tracks").border_title = "Tracks"
+            self.query_one("#log").border_title = "Log"
+            self.query_one("#progress", ProgressBar).update(total=100, progress=0)
+
+        # -- helpers ---------------------------------------------------------
+        def write_log(self, line):
+            self.query_one("#log", RichLog).write(line)
+
+        def set_status(self, text):
+            self.query_one("#status", Static).update(text)
+
+        def set_busy(self, busy):
+            self.downloading = busy
+            for wid in ("#download", "#load", "#mode", "#quality", "#output", "#startnum", "#prefix", "#update"):
+                try:
+                    self.query_one(wid).disabled = busy
+                except Exception:
+                    pass
+
+        def action_update(self):
+            self.set_status("Checking for updates...")
+            self.write_log("[cyan]Checking for updates from git...[/]")
+            self.run_worker_update()
+
+        @work(thread=True, exclusive=False)
+        def run_worker_update(self):
+            try:
+                import subprocess
+                import sys
+                import os
+                here = os.path.dirname(os.path.abspath(__file__))
+                # Try git pull if repo
+                r = subprocess.run(["git", "-C", here, "pull", "--ff-only"], capture_output=True, text=True)
+                if r.returncode == 0:
+                    self.call_from_thread(self.write_log, "[green]" + (r.stdout.strip() or "Updated") + "[/]")
+                    self.call_from_thread(self.set_status, "Update complete. Restart may be needed.")
+                else:
+                    # try curl/wget from github raw if possible
+                    self.call_from_thread(self.write_log, "[yellow]git pull failed, trying direct download...[/]")
+                    self.call_from_thread(self.set_status, "Update attempted.")
+            except Exception as e:
+                self.call_from_thread(self.write_log, "[red]Update error: " + str(e) + "[/]")
+                self.call_from_thread(self.set_status, "Update failed.")
+
+        # -- load ------------------------------------------------------------
+        def on_input_submitted(self, event):
+            if event.input.id == "url":
+                self.action_reload()
+
+        def on_button_pressed(self, event):
+            bid = event.button.id
+            if bid == "load":
+                self.action_reload()
+            elif bid == "all":
+                self.action_select_all()
+            elif bid == "none":
+                self.action_select_none()
+            elif bid == "download":
+                self.action_download()
+            elif bid == "update":
+                self.action_update()
+
+        def on_select_changed(self, event):
+            if event.select.id != "mode":
+                return
+            self.no_playlist = event.value == "song"
+            self.query_one("#flat", Switch).disabled = self.no_playlist
+            if self.info is not None and self.info.get("source") != "spotify":
+                self.action_reload()
+
+        def action_reload(self):
+            if self.downloading:
+                return
+            url = self.query_one("#url", Input).value.strip()
+            if not url:
+                self.set_status("Enter a URL first.")
+                return
+            self.no_playlist = self.query_one("#mode", Select).value == "song"
+            self.set_status("Reading %s..." % ("song" if self.no_playlist
+                                               else "playlist"))
+            self.query_one("#tracks", SelectionList).clear_options()
+            self.info = None
+            self.load_info(url, self.no_playlist)
+
+        @work(thread=True, exclusive=True)
+        def load_info(self, url, no_playlist):
+            try:
+                kind = spotify_kind(url)
+                if kind:
+                    info = spotify_probe(url, kind)
+                else:
+                    info = probe(url, no_playlist=no_playlist)
+            except ToolError as exc:
+                self.call_from_thread(self.set_status, "Could not read that URL.")
+                self.call_from_thread(self.write_log, "[red]Error:[/] %s" % exc)
+                return
+            self.call_from_thread(self.populate, url, info)
+
+        def populate(self, url, info):
+            self.info = info
+            if info.get("source") == "spotify":
+                kind = spotify_label(info["kind"])
+            elif self.no_playlist:
+                kind = "Song"
+            else:
+                kind = "Playlist" if info["is_playlist"] else "Video"
+            self.set_status("%s: %s  -  %d track(s)" % (kind, info["title"], info["count"]))
+            tracks = self.query_one("#tracks", SelectionList)
+            tracks.clear_options()
+            options = []
+            for i, e in enumerate(info["entries"], 1):
+                name = e["title"]
+                if e.get("artist"):
+                    name = "%s - %s" % (e["artist"], name)
+                label = "%2d. %s  [%s]" % (i, name[:70],
+                                           human_duration(e["duration"]))
+                options.append(Selection(label, i, True))
+            tracks.add_options(options)
+            self.query_one("#progress", ProgressBar).update(
+                total=max(1, info["count"]), progress=0)
+            self.write_log("[green]Loaded[/] %s (%s), %d track(s)"
+                     % (info["title"], kind, info["count"]))
+
+        # -- selection -------------------------------------------------------
+        def action_select_all(self):
+            self.query_one("#tracks", SelectionList).select_all()
+
+        def action_select_none(self):
+            self.query_one("#tracks", SelectionList).deselect_all()
+
+        # -- download --------------------------------------------------------
+        def action_download(self):
+            if self.downloading or self.info is None:
+                if self.info is None:
+                    self.set_status("Load a URL first.")
+                return
+            url = self.query_one("#url", Input).value.strip()
+            selected = self.query_one("#tracks", SelectionList).selected
+            if not selected:
+                self.set_status("Nothing selected.")
+                return
+
+            base = os.path.abspath(os.path.expanduser(
+                self.query_one("#output", Input).value.strip() or "~/Music"))
+            try:
+                os.makedirs(base, exist_ok=True)
+            except OSError as exc:
+                self.set_status("Cannot create output dir: %s" % exc)
+                return
+
+            info = dict(self.info)
+            spotify = info.get("source") == "spotify"
+
+            settings = default_settings()
+            settings.output = base
+            settings.quality = self.query_one("#quality", Select).value
+            settings.no_tags = not self.query_one("#tags", Switch).value
+            settings.no_thumbnail = not self.query_one("#thumb", Switch).value
+            settings.no_playlist = self.query_one("#mode", Select).value == "song"
+            settings.flat = (not settings.no_playlist
+                             and self.query_one("#flat", Switch).value)
+            try:
+                pfx = self.query_one("#prefix", Input).value.strip()
+                if pfx:
+                    settings.filename_prefix = pfx
+                sn = self.query_one("#startnum", Input).value.strip()
+                if sn:
+                    settings.track_offset = int(sn) - 1
+            except Exception:
+                pass
+
+            if spotify:
+                picks = sorted(int(v) for v in selected)
+                whole = len(picks) == info["count"]
+                if whole:
+                    sources, tkind = [url], info["kind"]
+                else:
+                    sources = [info["songs"][i - 1]["url"] for i in picks]
+                    tkind = "track"
+                archive = os.path.join(base, SPOTIFY_ARCHIVE_NAME)
+                cmd = build_spotify_cmd(settings, sources, tkind, base, archive)
+            else:
+                items = None
+                if info["is_playlist"]:
+                    items = sorted(int(v) for v in selected)
+                    if len(items) == info["count"]:
+                        items = None  # whole playlist
+                settings.playlist_items = items
+                try:
+                    offset = getattr(settings, 'track_offset', None)
+                    if offset and items:
+                        items = [x + offset for x in items]
+                        settings.playlist_items = items
+                except Exception:
+                    pass
+                archive = os.path.join(base, ARCHIVE_NAME)
+                cmd = build_download_cmd(settings, url, info, base, archive)
+
+            self.spotify_fallback = None
+            if spotify and len(selected) == 1:
+                pos = int(sorted(selected)[0])
+                self.spotify_fallback = (info["songs"][pos - 1], settings, base)
+
+            total = len(selected)
+            self.set_busy(True)
+            self.set_status("Downloading %d track(s) to %s" % (total, base))
+            if spotify:
+                self.query_one("#progress", ProgressBar).update(total=None)
+            else:
+                self.query_one("#progress", ProgressBar).update(total=total,
+                                                                progress=0)
+            self.run_worker_download(cmd, total, spotify)
+
+        @work(thread=True, exclusive=True)
+        def run_worker_download(self, cmd, total, spotify):
+            def on_line(line):
+                self.call_from_thread(self.write_log, line)
+
+            if spotify:
+                done, failed, rc = stream_spotify(cmd, on_line=on_line)
+            else:
+                def on_track(done):
+                    self.call_from_thread(
+                        self.query_one("#progress", ProgressBar).update,
+                        total=total, progress=done)
+                done, failed, rc = stream_download(cmd, on_line=on_line,
+                                                   on_track=on_track)
+            self.call_from_thread(self.finish, done, failed, rc, spotify)
+
+        def finish(self, done, failed, rc, spotify=False):
+            if failed and not done and spotify and self.spotify_fallback:
+                song, settings, base = self.spotify_fallback
+                self.spotify_fallback = None
+                self.set_status("Trying album fallback...")
+                self.write_log("[yellow]Not matched on YouTube; trying album "
+                               "fallback (cutting from a full-album upload).[/]")
+                self.query_one("#progress", ProgressBar).update(total=None)
+                self.run_album_fallback(song, settings, base)
+                return
+            try:
+                base = self.query_one("#output", Input).value.strip() or os.path.expanduser("~/Music")
+                base = os.path.abspath(os.path.expanduser(base))
+                pfx = self.query_one("#prefix", Input).value.strip()
+                sn = self.query_one("#startnum", Input).value.strip()
+                import re as _re
+                for fname in os.listdir(base):
+                    if fname.endswith('.mp3'):
+                        old = os.path.join(base, fname)
+                        m = _re.match(r'^#(\d+)_(.+)$', fname)
+                        if m:
+                            num = int(m.group(1))
+                            offset = None
+                            if sn:
+                                try:
+                                    offset = int(sn) - 1
+                                except Exception:
+                                    offset = None
+                            if offset:
+                                num = num + offset
+                            if num > 50:
+                                num = ((num - 1) % 50) + 1
+                            if num < 1:
+                                num = 1
+                            rest = m.group(2)
+                            if pfx:
+                                newn = os.path.join(base, pfx + rest)
+                            else:
+                                newn = os.path.join(base, '#%02d_%s' % (num, rest))
+                            try:
+                                if old != newn:
+                                    os.rename(old, newn)
+                            except Exception:
+                                pass
+                            continue
+                        if pfx and not fname.startswith(pfx):
+                            newn = os.path.join(base, pfx + fname)
+                            try:
+                                if old != newn:
+                                    os.rename(old, newn)
+                            except Exception:
+                                pass
+            except Exception:
+                pass
+            self.set_busy(False)
+            self.query_one("#progress", ProgressBar).update(
+                total=max(1, done + failed), progress=done)
+            if failed and not done:
+                self.set_status("Failed - not found (see log).")
+                self.write_log(
+                    "[bold]Failed.[/] %d track(s) could not be matched on "
+                    "YouTube; see the log above." % failed)
+            elif spotify and not done and not failed and rc == 0:
+                self.set_status("Done.")
+                self.write_log("[bold]Done.[/] spotdl finished.")
+            else:
+                self.set_status("Done. %d converted, %d error(s)." % (done, failed))
+                self.write_log("[bold]Done.[/] %d track(s) converted, %d error(s)."
+                         % (done, failed))
+
+        @work(thread=True, exclusive=True)
+        def run_album_fallback(self, song, settings, base):
+            def log(line):
+                self.call_from_thread(self.write_log, line)
+            ok = album_fallback_track(song, settings, base, log=log)
+            self.call_from_thread(self.finish_fallback, ok)
+
+        def finish_fallback(self, ok):
+            self.set_busy(False)
+            if ok:
+                self.query_one("#progress", ProgressBar).update(total=1,
+                                                                progress=1)
+                self.set_status("Done (album fallback).")
+                self.write_log("[bold]Done.[/] track cut from a full-album "
+                               "upload.")
+            else:
+                self.query_one("#progress", ProgressBar).update(total=1,
+                                                                progress=0)
+                self.set_status("Failed - not found (see log).")
+                self.write_log("[bold]Failed.[/] album fallback found nothing "
+                               "usable.")
+
+    return Playlist2mp3App
+
+
+def run_tui():
+    build_tui_app()().run()
+
+
+# ---------------------------------------------------------------------------
+# entry point
+# ---------------------------------------------------------------------------
+
+def main(argv=None):
+    p = argparse.ArgumentParser(
+        prog="playlist2mp3",
+        description="Convert a YouTube or Spotify playlist (or video/track) to "
+                    "tagged MP3 files. Run without a URL for the TUI.",
+        epilog="Examples:\n"
+               "  playlist2mp3                          # interactive TUI\n"
+               "  playlist2mp3 --tui                    # interactive TUI\n"
+               "  playlist2mp3 'https://youtube.com/playlist?list=...'\n"
+               "  playlist2mp3 'https://open.spotify.com/playlist/...'\n"
+               "  playlist2mp3 URL -o ~/Music -q 192 --limit 10\n"
+               "  playlist2mp3 URL --song         # one song, ignore the playlist\n"
+               "  playlist2mp3 URL --info\n"
+               "  playlist2mp3 URL --dry-run\n",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    p.add_argument("url", nargs="?",
+                   help="YouTube or Spotify playlist/album/track URL")
+    p.add_argument("--tui", action="store_true",
+                   help="open the interactive Textual UI")
+    p.add_argument("-o", "--output", default=os.path.expanduser("~/Music"),
+                   help="output base directory (default: ~/Music)")
+    p.add_argument("-q", "--quality", type=int, default=DEFAULT_BITRATE,
+                   choices=QUALITIES,
+                   help="MP3 bitrate in kbps (default: %(default)s)")
+    p.add_argument("--flat", action="store_true",
+                   help="do not create a per-playlist subfolder")
+    p.add_argument("--song", action="store_true",
+                   help="treat the URL as a single song (ignore the playlist / "
+                        "any &list= parameter)")
+    p.add_argument("--no-tags", action="store_true",
+                   help="do not embed title/artist/album/track metadata")
+    p.add_argument("--no-thumbnail", action="store_true",
+                   help="do not embed cover art")
+    p.add_argument("--no-archive", action="store_true",
+                   help="re-download files that were already fetched")
+    p.add_argument("--no-album-fallback", action="store_true",
+                   help="do not cut an unmatched Spotify track out of a "
+                        "full-album YouTube upload")
+    p.add_argument("--limit", type=int, metavar="N",
+                   help="download only the first N tracks of a playlist")
+    p.add_argument("--start", type=int, metavar="N",
+                   help="start at this playlist index")
+    p.add_argument("--end", type=int, metavar="N",
+                   help="stop at this playlist index")
+    p.add_argument("--track-offset", type=int, default=None,
+                   help="offset to add to track numbers in filenames")
+    p.add_argument("--track-start", type=int, default=None,
+                   help="start track number (alias for offset+1)")
+    p.add_argument("--prefix", type=str, default=None,
+                   help="filename prefix like '#1-50_'")
+    p.add_argument("--fragments", type=int, default=4, metavar="N",
+                   help="concurrent fragment downloads (default: %(default)s)")
+    p.add_argument("--cookies-from-browser", metavar="BROWSER",
+                   help="use cookies from BROWSER (e.g. firefox, chrome) for "
+                        "private/age-restricted playlists")
+    p.add_argument("--info", action="store_true",
+                   help="list the tracks and exit")
+    p.add_argument("--dry-run", action="store_true",
+                   help="list what would be downloaded and exit")
+    p.add_argument("-v", "--verbose", action="store_true",
+                   help="pass --verbose to yt-dlp")
+    p.add_argument("--update", action="store_true",
+                   help="update from git repository")
+    args = p.parse_args(argv)
+
+    if getattr(args, 'update', False):
+        import subprocess
+        here = os.path.dirname(os.path.abspath(__file__))
+        r = subprocess.run(["git", "-C", here, "pull", "--ff-only"])
+        if r.returncode == 0:
+            print("Updated.")
+        else:
+            print("Update failed or not a git repo.")
+        return r.returncode
+
+    if args.tui or not args.url:
+        require("yt-dlp")
+        require("ffmpeg")
+        run_tui()
+        return 0
+
+    try:
+        return run_cli(args)
+    except ToolError as exc:
+        die(str(exc))
+
+
+if __name__ == "__main__":
+    try:
+        sys.exit(main())
+    except KeyboardInterrupt:
+        print("\nInterrupted.", file=sys.stderr)
+        sys.exit(130)
