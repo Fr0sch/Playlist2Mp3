@@ -240,14 +240,20 @@ class Playlist2Mp3Window(QMainWindow):
     # -- helpers ---------------------------------------------------------
 
     def set_busy(self, busy):
-        self.download_btn.setEnabled(not busy)
+        try:
+            self.download_btn.setEnabled(not busy)
+        except Exception:
+            pass
         try:
             self.update_btn.setEnabled(not busy)
         except Exception:
             pass
         for widget in (self.url_edit, self.mode, self.bitrate, self.flat,
                        self.tags, self.cover, self.archive, self.start_num):
-            widget.setEnabled(not busy)
+            try:
+                widget.setEnabled(not busy)
+            except Exception:
+                pass
 
     def on_mode_changed(self, _index):
         self.flat.setEnabled(self.mode.currentData() == "playlist")
@@ -439,24 +445,36 @@ class Playlist2Mp3Window(QMainWindow):
         def _upd():
             try:
                 here = os.path.dirname(os.path.abspath(__file__))
-                r = subprocess.run(["git", "-C", here, "pull", "--ff-only"], capture_output=True, text=True)
-                if r.returncode == 0:
-                    self.log_line(r.stdout.strip() or "Updated")
-                    self.status.setText("Update complete. Restart may be needed.")
-                else:
-                    self.log_line("git pull failed")
-                    self.status.setText("Update attempted (git failed).")
+                try:
+                    r = subprocess.run(["git", "-C", here, "pull", "--ff-only"], capture_output=True, text=True, timeout=60)
+                    if r.returncode == 0:
+                        self.log_line((r.stdout or r.stderr or "").strip() or "Updated")
+                        self.status.setText("Update complete. Restart may be needed.")
+                        return
+                except Exception:
+                    pass
+                self.log_line("Update not available or not a git repo.")
+                self.status.setText("Update skipped.")
             except Exception as e:
                 self.log_line("Update error: %s" % e)
                 self.status.setText("Update failed.")
             finally:
-                self.set_busy(False)
+                try:
+                    self.set_busy(False)
+                except Exception:
+                    pass
         threading.Thread(target=_upd, daemon=True).start()
 
     def on_download_done(self, done, failed, rc, spotify):
-        self.set_busy(False)
-        self.progress.setRange(0, 1)
-        self.progress.setValue(1 if rc == 0 and done else 0)
+        try:
+            self.set_busy(False)
+        except Exception:
+            pass
+        try:
+            self.progress.setRange(0, 1)
+            self.progress.setValue(1 if rc == 0 and done else 0)
+        except Exception:
+            pass
         try:
             settings = self.make_settings()
             offset = getattr(settings, 'track_offset', None)
@@ -482,12 +500,15 @@ class Playlist2Mp3Window(QMainWindow):
                             pass
         except Exception:
             pass
-        if done:
-            self.status.setText("Done. %d track(s) downloaded." % done)
-            self.log_line("Done. %d track(s) downloaded." % done)
-        elif failed:
-            self.status.setText("%d track(s) failed." % failed)
-            self.log_line("%d track(s) failed." % failed)
+        try:
+            if done:
+                self.status.setText("Done. %d track(s) downloaded." % done)
+                self.log_line("Done. %d track(s) downloaded." % done)
+            elif failed:
+                self.status.setText("%d track(s) failed." % failed)
+                self.log_line("%d track(s) failed." % failed)
+        except Exception:
+            pass
 
 
 def main(argv=None):

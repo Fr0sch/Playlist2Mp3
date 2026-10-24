@@ -371,18 +371,18 @@ def build_tui_app():
         def run_worker_update(self):
             try:
                 import subprocess
-                import sys
                 import os
                 here = os.path.dirname(os.path.abspath(__file__))
-                # Try git pull if repo
-                r = subprocess.run(["git", "-C", here, "pull", "--ff-only"], capture_output=True, text=True)
-                if r.returncode == 0:
-                    self.call_from_thread(self.write_log, "[green]" + (r.stdout.strip() or "Updated") + "[/]")
-                    self.call_from_thread(self.set_status, "Update complete. Restart may be needed.")
-                else:
-                    # try curl/wget from github raw if possible
-                    self.call_from_thread(self.write_log, "[yellow]git pull failed, trying direct download...[/]")
-                    self.call_from_thread(self.set_status, "Update attempted.")
+                try:
+                    r = subprocess.run(["git", "-C", here, "pull", "--ff-only"], capture_output=True, text=True, timeout=60)
+                    if r.returncode == 0:
+                        self.call_from_thread(self.write_log, "[green]" + ((r.stdout or r.stderr or "").strip() or "Updated") + "[/]")
+                        self.call_from_thread(self.set_status, "Update complete. Restart may be needed.")
+                        return
+                except Exception:
+                    pass
+                self.call_from_thread(self.write_log, "[yellow]Update not available or not a git repo.[/]")
+                self.call_from_thread(self.set_status, "Update skipped.")
             except Exception as e:
                 self.call_from_thread(self.write_log, "[red]Update error: " + str(e) + "[/]")
                 self.call_from_thread(self.set_status, "Update failed.")
