@@ -536,6 +536,9 @@ def build_tui_app():
                     if offset and items:
                         items = [x + offset for x in items]
                         settings.playlist_items = items
+                    elif offset and not items and info.get("is_playlist"):
+                        items = [x + 1 + offset for x in range(info["count"])]
+                        settings.playlist_items = items
                 except Exception:
                     pass
                 archive = os.path.join(base, ARCHIVE_NAME)

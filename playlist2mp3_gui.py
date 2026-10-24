@@ -345,9 +345,22 @@ class Playlist2Mp3Window(QMainWindow):
             whole = len(selected) >= len(songs)
             if whole:
                 sources, tkind = [self.url], self.info["kind"]
+                try:
+                    offset = getattr(settings, 'track_offset', None)
+                    if offset:
+                        settings.track_offset = offset
+                        settings.playlist_items = [x + 1 + offset for x in range(len(songs))]
+                except Exception:
+                    pass
             else:
                 sources = [songs[i]["url"] for i in selected]
                 tkind = "track"
+                try:
+                    offset = getattr(settings, 'track_offset', None)
+                    if offset:
+                        settings.playlist_items = [s + 1 + offset for s in selected]
+                except Exception:
+                    pass
             if not whole and len(sources) == 1:
                 fallback = (songs[selected[0]], settings, base)
             cmd = core.build_spotify_cmd(settings, sources, tkind, base, archive)
@@ -365,6 +378,10 @@ class Playlist2Mp3Window(QMainWindow):
                 offset = getattr(settings, 'track_offset', None)
                 if offset and items:
                     items = [x + offset for x in items]
+                    settings.playlist_items = items
+                elif offset and not items:
+                    # whole playlist but we want to shift numbers
+                    items = [x + 1 + offset for x in range(total)]
                     settings.playlist_items = items
             except Exception:
                 pass
