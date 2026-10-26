@@ -84,33 +84,47 @@ release is a double-clickable `playlist2mp3-gui.app`; it expects the Homebrew
 tools (`brew install yt-dlp ffmpeg spotdl`), which it finds even when launched
 from Finder.
 
+Grab the latest builds from
+[GitHub Releases](https://github.com/Fr0sch/Playlist2Mp3/releases/latest):
+
+| Platform | Download |
+| --- | --- |
+| Windows 11 x64 (everything bundled) | `playlist2mp3-gui-windows-x64.zip` |
+| macOS 12+ Apple Silicon (arm64) | `playlist2mp3-gui-macos-arm64.zip` |
+| Linux x86_64 (needs `yt-dlp` + `ffmpeg`) | `playlist2mp3-gui-linux-x64.tar.gz` |
+
+On Windows, unzip the archive and run `playlist2mp3-gui.exe` from inside the
+folder (keep it next to `bin\`). SmartScreen may warn about an unsigned app:
+choose **More info** → **Run anyway**.
+
+On macOS, unzip and drag `playlist2mp3-gui.app` into `Applications`.
+
 ```sh
 .venv/bin/python playlist2mp3_gui.py
 ```
-or the prebuilt binaries from the GitHub Actions artifacts
-(`dist/playlist2mp3-gui` on Linux, `dist/playlist2mp3-gui.exe` on Windows,
-`dist/playlist2mp3-gui.app` on macOS).
 
-Build a standalone binary yourself with the provided specs:
+Build a standalone binary yourself with the provided scripts (each writes its
+release archive to `dist/`):
 
 ```sh
-# Linux
+# Linux -> dist/playlist2mp3-gui-linux-x64.tar.gz
 ./packaging/build_linux.sh
 
-# Windows (PowerShell)
+# Windows (PowerShell) -> dist/playlist2mp3-gui-windows-x64.zip
 .\packaging\build_windows.ps1
 
-# macOS (Apple Silicon; produces dist/playlist2mp3-gui.app)
+# macOS (Apple Silicon) -> dist/playlist2mp3-gui-macos-arm64.zip
 ./packaging/build_macos.sh
 ```
 
-GitHub Actions builds all three automatically on every push to `main` (see
+GitHub Actions builds all three automatically on every push to `main` and, for
+`v*` tags, attaches the archives to a GitHub Release (see
 `.github/workflows/build-gui.yml`). The GUI shares the exact same core
 (`p2m_core.py`) as the CLI and TUI.
 
 > The macOS `.app` is built and ad-hoc signed but not notarized. If macOS
 > blocks the first launch, right-click the app → **Open**, or run
-> `xattr -dr com.apple.quarantine /path/to/playlist2mp3-gui.app`.
+> `xattr -dr com.apple.quarantine /Applications/playlist2mp3-gui.app`.
 
 ## TUI
 
@@ -192,6 +206,8 @@ with `--no-album-fallback`.
 | `--no-album-fallback` | Don't cut an unmatched Spotify track from a full-album upload |
 | `--limit N` | Only the first N tracks |
 | `--start N` / `--end N` | Playlist index range |
+| `--track-start N` | Start file numbering at N (does not skip tracks) |
+| `--prefix TEXT` | Replace the `#NN_` filename prefix with TEXT |
 | `--fragments N` | Concurrent fragment downloads (default 4) |
 | `--cookies-from-browser B` | Use browser cookies (private/age-restricted) |
 | `--info` | List tracks and exit |

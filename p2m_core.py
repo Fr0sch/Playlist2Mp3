@@ -63,7 +63,10 @@ def _tool_dirs():
     dirs = []
     if getattr(sys, "frozen", False):
         base = os.path.dirname(sys.executable)
-        dirs += [base, os.path.join(base, "bin")]
+        # `bin/spotdl` is a PyInstaller onedir build (a folder, not a single
+        # binary), which is how the Windows release ships spotdl.
+        dirs += [base, os.path.join(base, "bin"),
+                 os.path.join(base, "bin", "spotdl")]
         if sys.platform == "darwin":
             contents = os.path.dirname(base)  # .../Foo.app/Contents
             dirs += [os.path.join(contents, "Resources", "bin")]
@@ -286,7 +289,9 @@ def spotify_probe(url, kind=None):
 
 def build_spotify_output_template(base, kind, flat):
     if kind == "track":
-        return os.path.join(base, "#{list-position:02d}_{artists} - {title}.{output-ext}")
+        # A standalone track has no list position, so do not prefix a number;
+        # spotdl would otherwise leave the "{list-position}" placeholder literal.
+        return os.path.join(base, "{artists} - {title}.{output-ext}")
     if kind == "album":
         return os.path.join(base, "{album}",
                             "#{track-number:02d}_{artists} - {title}.{output-ext}")
@@ -474,11 +479,30 @@ def album_fallback_track(song, settings, base, log=print):
     return True
 
 
-def build_output_template(base, info, flat):
-    if not info["is_playlist"]:
-        return os.path.join(base, "#%(playlist_index|1)02d_%(artist,uploader,creator,channel|Unknown)s - %(title)s.%(ext)s")
-    track = "#%(playlist_index)02d_%(artist,uploader,creator,channel|Unknown)s - %(title)s.%(ext)s"
-    if flat:
+def _index_template(offset):
+    """yt-dlp output field for the track number, shifted by `offset`.
+
+    yt-dlp supports arithmetic inside output fields ("%(playlist_index+9)02d"),
+    so the offset is applied while the file is named instead of being renamed
+    afterwards. That keeps renames out of the download and makes them work for
+    non-flat playlists too (files live in a per-playlist subfolder).
+    """
+    if offset:
+        return "%%(playlist_index+%d)02d" % offset
+    return "%(playlist_index)02d"
+
+
+def build_output_template(base, info, flat, offset=None, prefix=None):
+    artist = "%(artist,uploader,creator,channel|Unknown)s"
+    rest = artist + " - %(title)s.%(ext)s"
+    if prefix:
+        # A prefix replaces the "#NN_" part, matching the old rename behaviour.
+        track = prefix + rest
+    elif not info["is_playlist"]:
+        track = "#%02d_%s" % (1 + (offset or 0), rest)
+    else:
+        track = "#" + _index_template(offset) + "_" + rest
+    if not info["is_playlist"] or flat:
         return os.path.join(base, track)
     return os.path.join(base, "%(playlist_title)s", track)
 
@@ -497,7 +521,10 @@ def build_download_cmd(settings, url, info, base, archive):
         "--retries", "10",
         "--fragment-retries", "10",
         "--concurrent-fragments", str(settings.fragments),
-        "--output", build_output_template(base, info, settings.flat),
+        "--output", build_output_template(
+            base, info, settings.flat,
+            getattr(settings, "track_offset", None),
+            getattr(settings, "filename_prefix", None)),
     ]
 
     if settings.no_playlist:

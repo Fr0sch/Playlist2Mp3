@@ -38,6 +38,10 @@ def _target_arch():
 
 TARGET_ARCH = _target_arch()
 
+# Injected by CI from the git tag (see .github/workflows/build-gui.yml); local
+# builds just report 1.0.0.
+APP_VERSION = os.environ.get("P2M_VERSION", "1.0.0").lstrip("v") or "1.0.0"
+
 a = Analysis(
     [os.path.join(ROOT, "playlist2mp3_gui.py")],
     pathex=[ROOT],
@@ -83,8 +87,8 @@ if IS_MAC:
         info_plist={
             "CFBundleName": "playlist2mp3",
             "CFBundleDisplayName": "playlist2mp3",
-            "CFBundleShortVersionString": "1.0.0",
-            "CFBundleVersion": "1.0.0",
+            "CFBundleShortVersionString": APP_VERSION,
+            "CFBundleVersion": APP_VERSION,
             "LSMinimumSystemVersion": "12.0",
             "NSHighResolutionCapable": True,
         },

@@ -190,42 +190,6 @@ def run_cli(args):
 
     done, failed, rc = stream_download(cmd, on_line=print)
     print("-" * 60)
-    try:
-        pfx = getattr(settings, 'filename_prefix', None)
-        offset = getattr(settings, 'track_offset', None)
-        import re as _re
-        for fname in os.listdir(base):
-            if fname.endswith('.mp3'):
-                old = os.path.join(base, fname)
-                m = _re.match(r'^#(\d+)_(.+)$', fname)
-                if m:
-                    num = int(m.group(1))
-                    if offset:
-                        num = num + offset
-                    if num > 50:
-                        num = ((num - 1) % 50) + 1
-                    if num < 1:
-                        num = 1
-                    rest = m.group(2)
-                    if pfx:
-                        newn = os.path.join(base, pfx + rest)
-                    else:
-                        newn = os.path.join(base, '#%02d_%s' % (num, rest))
-                    try:
-                        if old != newn:
-                            os.rename(old, newn)
-                    except Exception:
-                        pass
-                    continue
-                if pfx and not fname.startswith(pfx):
-                    newn = os.path.join(base, pfx + fname)
-                    try:
-                        if old != newn:
-                            os.rename(old, newn)
-                    except Exception:
-                        pass
-    except Exception:
-        pass
     print("Done. %d track(s) converted, %d error(s)." % (done, failed))
     if rc != 0 and done == 0:
         return rc
@@ -530,17 +494,10 @@ def build_tui_app():
                     items = sorted(int(v) for v in selected)
                     if len(items) == info["count"]:
                         items = None  # whole playlist
+                # track_offset only shifts file numbering (applied in the
+                # yt-dlp output template); it must never change which
+                # playlist items are downloaded.
                 settings.playlist_items = items
-                try:
-                    offset = getattr(settings, 'track_offset', None)
-                    if offset and items:
-                        items = [x + offset for x in items]
-                        settings.playlist_items = items
-                    elif offset and not items and info.get("is_playlist"):
-                        items = [x + 1 + offset for x in range(info["count"])]
-                        settings.playlist_items = items
-                except Exception:
-                    pass
                 archive = os.path.join(base, ARCHIVE_NAME)
                 cmd = build_download_cmd(settings, url, info, base, archive)
 
@@ -585,50 +542,6 @@ def build_tui_app():
                 self.query_one("#progress", ProgressBar).update(total=None)
                 self.run_album_fallback(song, settings, base)
                 return
-            try:
-                base = self.query_one("#output", Input).value.strip() or os.path.expanduser("~/Music")
-                base = os.path.abspath(os.path.expanduser(base))
-                pfx = self.query_one("#prefix", Input).value.strip()
-                sn = self.query_one("#startnum", Input).value.strip()
-                import re as _re
-                for fname in os.listdir(base):
-                    if fname.endswith('.mp3'):
-                        old = os.path.join(base, fname)
-                        m = _re.match(r'^#(\d+)_(.+)$', fname)
-                        if m:
-                            num = int(m.group(1))
-                            offset = None
-                            if sn:
-                                try:
-                                    offset = int(sn) - 1
-                                except Exception:
-                                    offset = None
-                            if offset:
-                                num = num + offset
-                            if num > 50:
-                                num = ((num - 1) % 50) + 1
-                            if num < 1:
-                                num = 1
-                            rest = m.group(2)
-                            if pfx:
-                                newn = os.path.join(base, pfx + rest)
-                            else:
-                                newn = os.path.join(base, '#%02d_%s' % (num, rest))
-                            try:
-                                if old != newn:
-                                    os.rename(old, newn)
-                            except Exception:
-                                pass
-                            continue
-                        if pfx and not fname.startswith(pfx):
-                            newn = os.path.join(base, pfx + fname)
-                            try:
-                                if old != newn:
-                                    os.rename(old, newn)
-                            except Exception:
-                                pass
-            except Exception:
-                pass
             self.set_busy(False)
             self.query_one("#progress", ProgressBar).update(
                 total=max(1, done + failed), progress=done)
@@ -637,6 +550,11 @@ def build_tui_app():
                 self.write_log(
                     "[bold]Failed.[/] %d track(s) could not be matched on "
                     "YouTube; see the log above." % failed)
+            elif not done and not failed and not spotify:
+                self.set_status("Nothing new downloaded (see log).")
+                self.write_log(
+                    "[bold]Nothing new downloaded.[/] All selected tracks are "
+                    "already in the output folder or were skipped by yt-dlp.")
             elif spotify and not done and not failed and rc == 0:
                 self.set_status("Done.")
                 self.write_log("[bold]Done.[/] spotdl finished.")

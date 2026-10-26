@@ -10,7 +10,6 @@ Requires external tools on PATH: yt-dlp, ffmpeg, and spotdl (for Spotify roots).
 """
 
 import os
-import re
 import sys
 
 from PySide6.QtCore import Qt, QThread, Signal
@@ -401,18 +400,9 @@ class Playlist2Mp3Window(QMainWindow):
                 items = [i + 1 for i in selected]
                 if len(items) >= len(self.info.get("entries") or []):
                     items = None
+            # track_offset only shifts file numbering (applied in the yt-dlp
+            # output template); it must never change the downloaded items.
             settings.playlist_items = items
-            try:
-                offset = getattr(settings, 'track_offset', None)
-                if offset and items:
-                    items = [x + offset for x in items]
-                    settings.playlist_items = items
-                elif offset and not items:
-                    # whole playlist but we want to shift numbers
-                    items = [x + 1 + offset for x in range(total)]
-                    settings.playlist_items = items
-            except Exception:
-                pass
             cmd = core.build_download_cmd(settings, self.url, self.info, base, archive)
             source_label = "YouTube playlist" if self.info.get("is_playlist") else "YouTube"
             self.log_line("Source: %s - %s" % (source_label, self.info.get("title")))
@@ -476,37 +466,15 @@ class Playlist2Mp3Window(QMainWindow):
         except Exception:
             pass
         try:
-            settings = self.make_settings()
-            offset = getattr(settings, 'track_offset', None)
-            base = settings.output
-            for fname in os.listdir(base):
-                if fname.endswith('.mp3'):
-                    old = os.path.join(base, fname)
-                    m = re.match(r'^#(\d+)_(.+)$', fname)
-                    if m:
-                        num = int(m.group(1))
-                        if offset is not None and offset != 0:
-                            num = num + offset
-                        if num > 50:
-                            num = ((num - 1) % 50) + 1
-                        if num < 1:
-                            num = 1
-                        rest = m.group(2)
-                        newn = os.path.join(base, '#%02d_%s' % (num, rest))
-                        try:
-                            if old != newn:
-                                os.rename(old, newn)
-                        except Exception:
-                            pass
-        except Exception:
-            pass
-        try:
             if done:
                 self.status.setText("Done. %d track(s) downloaded." % done)
                 self.log_line("Done. %d track(s) downloaded." % done)
             elif failed:
                 self.status.setText("%d track(s) failed." % failed)
                 self.log_line("%d track(s) failed." % failed)
+            elif not spotify:
+                self.status.setText("Nothing new downloaded.")
+                self.log_line("Nothing new downloaded (already present or skipped).")
         except Exception:
             pass
 
