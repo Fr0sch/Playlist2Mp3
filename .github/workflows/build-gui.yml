@@ -3,14 +3,24 @@ name: build-gui
 # Builds release archives for Linux, Windows and macOS on every push to main,
 # and publishes them as GitHub Release assets when a v* tag is pushed.
 #
-# Manual run:  gh workflow run build-gui
-# Release:     git tag v1.0.0 && git push origin v1.0.0
+# The Windows build is also committed back to main (playlist2mp3-gui.exe + bin/)
+# so that downloading the repo gives a runnable app with no build step. That
+# refresh runs on a v* tag and on a manual run with commit_bundle=true:
+#
+# Manual run:            gh workflow run build-gui
+# Refresh the bundle:    gh workflow run build-gui -f commit_bundle=true
+# Release:               git tag v1.0.0 && git push origin v1.0.0
 
 on:
   push:
     branches: ["main"]
     tags: ["v*"]
   workflow_dispatch:
+    inputs:
+      commit_bundle:
+        description: "Rebuild and commit playlist2mp3-gui.exe + bin/ to main"
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -66,6 +76,33 @@ jobs:
           if-no-files-found: error
           # Archives are already compressed.
           compression-level: 0
+
+      # The repo ships the Windows app so a plain download runs on Windows.
+      # Keep that copy in sync with what this build produced.
+      - name: Refresh the committed Windows bundle
+        if: >-
+          matrix.name == 'windows-x64' &&
+          (startsWith(github.ref, 'refs/tags/v') || inputs.commit_bundle == true)
+        shell: bash
+        run: |
+          set -euo pipefail
+          src="dist/playlist2mp3-gui-windows-x64"
+          cp "$src/playlist2mp3-gui.exe" playlist2mp3-gui.exe
+          rm -rf bin
+          cp -r "$src/bin" bin
+
+          git add -A -- playlist2mp3-gui.exe bin
+          if git diff --cached --quiet; then
+            echo "committed bundle is already up to date"
+            exit 0
+          fi
+
+          git -c user.name="github-actions[bot]" \
+              -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+              commit -m "Refresh the committed Windows bundle ($P2M_VERSION)
+
+          Built by the build-gui workflow from ${GITHUB_REF_NAME}."
+          git push origin HEAD:main
 
   release:
     name: publish release

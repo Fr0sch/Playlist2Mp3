@@ -279,7 +279,7 @@ def build_tui_app():
                     yield Input(placeholder="1", id="startnum")
                 with Vertical(classes="opt"):
                     yield Label("Prefix/Range")
-                    yield Input(placeholder="#1-50_", id="prefix")
+                    yield Input(placeholder="1-50_", id="prefix")
                 with Vertical(classes="opt"):
                     yield Label("Mode")
                     yield Select([("Playlist", "playlist"), ("Song", "song")],
@@ -646,7 +646,7 @@ def main(argv=None):
     p.add_argument("--track-start", type=int, default=None,
                    help="start track number (alias for offset+1)")
     p.add_argument("--prefix", type=str, default=None,
-                   help="filename prefix like '#1-50_'")
+                   help="filename prefix like '1-50_'")
     p.add_argument("--fragments", type=int, default=4, metavar="N",
                    help="concurrent fragment downloads (default: %(default)s)")
     p.add_argument("--cookies-from-browser", metavar="BROWSER",

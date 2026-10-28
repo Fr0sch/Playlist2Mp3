@@ -213,7 +213,7 @@ with `--no-album-fallback`.
 | `--limit N` | Only the first N tracks |
 | `--start N` / `--end N` | Playlist index range |
 | `--track-start N` | Start file numbering at N (does not skip tracks) |
-| `--prefix TEXT` | Replace the `#NN_` filename prefix with TEXT |
+| `--prefix TEXT` | Replace the `NN_` filename prefix with TEXT |
 | `--fragments N` | Concurrent fragment downloads (default 4) |
 | `--cookies-from-browser B` | Use browser cookies (private/age-restricted) |
 | `--info` | List tracks and exit |

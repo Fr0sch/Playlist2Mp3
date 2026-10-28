@@ -294,11 +294,11 @@ def build_spotify_output_template(base, kind, flat):
         return os.path.join(base, "{artists} - {title}.{output-ext}")
     if kind == "album":
         return os.path.join(base, "{album}",
-                            "#{track-number:02d}_{artists} - {title}.{output-ext}")
+                            "{track-number:02d}_{artists} - {title}.{output-ext}")
     if flat:
-        return os.path.join(base, "#{list-position:02d}_{artists} - {title}.{output-ext}")
+        return os.path.join(base, "{list-position:02d}_{artists} - {title}.{output-ext}")
     return os.path.join(base, "{list-name}",
-                        "#{list-position:02d}_{artists} - {title}.{output-ext}")
+                        "{list-position:02d}_{artists} - {title}.{output-ext}")
 
 
 def build_spotify_cmd(settings, sources, kind, base, archive):
@@ -496,12 +496,12 @@ def build_output_template(base, info, flat, offset=None, prefix=None):
     artist = "%(artist,uploader,creator,channel|Unknown)s"
     rest = artist + " - %(title)s.%(ext)s"
     if prefix:
-        # A prefix replaces the "#NN_" part, matching the old rename behaviour.
+        # A prefix replaces the "NN_" part, matching the old rename behaviour.
         track = prefix + rest
     elif not info["is_playlist"]:
-        track = "#%02d_%s" % (1 + (offset or 0), rest)
+        track = "%02d_%s" % (1 + (offset or 0), rest)
     else:
-        track = "#" + _index_template(offset) + "_" + rest
+        track = _index_template(offset) + "_" + rest
     if not info["is_playlist"] or flat:
         return os.path.join(base, track)
     return os.path.join(base, "%(playlist_title)s", track)

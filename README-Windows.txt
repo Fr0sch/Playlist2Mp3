@@ -19,10 +19,11 @@ Notes
   enough; no API keys are needed.
 - Keep the exe next to the bin folder. If you move the exe, move the whole
   folder.
-- ffmpeg is licensed under the LGPL v3 (shared libraries, so the exe stays
-  small); see bin\ffmpeg-LICENSE.txt.
-- The exe and bin\ are built by packaging\build_windows.ps1 (and by GitHub
-  Actions on every push) - a normal "git pull" updates the sources and these
-  binaries together, there is nothing to rebuild to run the app.
+- ffmpeg is licensed under the LGPL v3 (shared libraries, which also keep every
+  file small enough for GitHub); see bin\ffmpeg-LICENSE.txt.
+- The exe and bin\ are rebuilt by GitHub Actions and committed back to the repo
+  on release tags and on manual runs (see .github\workflows\build-gui.yml), so a
+  normal "git pull" updates sources and binaries together and there is nothing
+  to rebuild to run the app. Locally, packaging\build_windows.ps1 does the same.
 
 Source: https://github.com/Fr0sch/Playlist2Mp3
