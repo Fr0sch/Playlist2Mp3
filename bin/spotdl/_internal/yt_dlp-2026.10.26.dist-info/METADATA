@@ -1,6 +1,6 @@
 Metadata-Version: 2.5
 Name: yt-dlp
-Version: 2026.10.21
+Version: 2026.10.26
 Summary: A feature-rich command-line audio/video downloader
 Project-URL: Documentation, https://github.com/yt-dlp/yt-dlp#readme
 Project-URL: Repository, https://github.com/yt-dlp/yt-dlp
@@ -16,19 +16,18 @@ Classifier: Environment :: Console
 Classifier: Operating System :: OS Independent
 Classifier: Programming Language :: Python
 Classifier: Programming Language :: Python :: 3 :: Only
-Classifier: Programming Language :: Python :: 3.10
 Classifier: Programming Language :: Python :: 3.11
 Classifier: Programming Language :: Python :: 3.12
 Classifier: Programming Language :: Python :: 3.13
 Classifier: Programming Language :: Python :: 3.14
+Classifier: Programming Language :: Python :: 3.15
 Classifier: Programming Language :: Python :: Implementation
 Classifier: Programming Language :: Python :: Implementation :: CPython
 Classifier: Programming Language :: Python :: Implementation :: PyPy
 Classifier: Topic :: Multimedia :: Video
-Requires-Python: >=3.10
+Requires-Python: >=3.11
 Provides-Extra: curl-cffi
-Requires-Dist: curl-cffi!=0.6.*,!=0.7.*,!=0.8.*,!=0.9.*,<0.17,>=0.5.10; (implementation_name == 'cpython') and extra == 'curl-cffi'
-Requires-Dist: typing-extensions; (python_full_version < '3.11') and extra == 'curl-cffi'
+Requires-Dist: curl-cffi!=0.6.*,!=0.7.*,!=0.8.*,!=0.9.*,<0.18,>=0.5.10; (implementation_name == 'cpython') and extra == 'curl-cffi'
 Provides-Extra: default
 Requires-Dist: brotli; (implementation_name == 'cpython' and sys_platform != 'ios') and extra == 'default'
 Requires-Dist: brotlicffi; (implementation_name != 'cpython') and extra == 'default'
@@ -42,9 +41,9 @@ Requires-Dist: yt-dlp-ejs==0.8.0; extra == 'default'
 Provides-Extra: deno
 Requires-Dist: deno>=2.9.8; extra == 'deno'
 Provides-Extra: pin
-Requires-Dist: brotli==1.2.0; (implementation_name == 'cpython' and sys_platform != 'ios') and extra == 'pin'
-Requires-Dist: brotlicffi==1.2.0.2; (implementation_name != 'cpython') and extra == 'pin'
-Requires-Dist: certifi==2026.10.19; extra == 'pin'
+Requires-Dist: brotli==1.2.1; (implementation_name == 'cpython' and sys_platform != 'ios') and extra == 'pin'
+Requires-Dist: brotlicffi==1.2.1.0; (implementation_name != 'cpython') and extra == 'pin'
+Requires-Dist: certifi==2026.10.23; extra == 'pin'
 Requires-Dist: charset-normalizer==3.5.2; extra == 'pin'
 Requires-Dist: idna==3.20; extra == 'pin'
 Requires-Dist: mutagen==1.48.1; extra == 'pin'
@@ -52,15 +51,13 @@ Requires-Dist: pycparser==3.11; (implementation_name != 'PyPy' and implementatio
 Requires-Dist: pycryptodomex==3.24.1; extra == 'pin'
 Requires-Dist: requests==2.34.2; extra == 'pin'
 Requires-Dist: urllib3==2.8.0; extra == 'pin'
-Requires-Dist: websockets==16.1.1; (python_full_version < '3.11') and extra == 'pin'
-Requires-Dist: websockets==17.2; (python_full_version >= '3.11') and extra == 'pin'
+Requires-Dist: websockets==17.3; extra == 'pin'
 Requires-Dist: yt-dlp-ejs==0.8.0; extra == 'pin'
 Provides-Extra: pin-curl-cffi
-Requires-Dist: certifi==2026.10.19; (implementation_name == 'cpython') and extra == 'pin-curl-cffi'
+Requires-Dist: certifi==2026.10.23; (implementation_name == 'cpython') and extra == 'pin-curl-cffi'
 Requires-Dist: cffi==2.1.1; (implementation_name == 'cpython') and extra == 'pin-curl-cffi'
-Requires-Dist: curl-cffi==0.16.3; (implementation_name == 'cpython') and extra == 'pin-curl-cffi'
+Requires-Dist: curl-cffi==0.17.0; (implementation_name == 'cpython') and extra == 'pin-curl-cffi'
 Requires-Dist: pycparser==3.11; (implementation_name == 'cpython') and extra == 'pin-curl-cffi'
-Requires-Dist: typing-extensions==4.16.0; (python_full_version < '3.11') and extra == 'pin-curl-cffi'
 Provides-Extra: pin-deno
 Requires-Dist: deno==2.9.8; extra == 'pin-deno'
 Provides-Extra: pin-secretstorage
@@ -69,7 +66,6 @@ Requires-Dist: cryptography==50.0.2; extra == 'pin-secretstorage'
 Requires-Dist: jeepney==0.9.0; extra == 'pin-secretstorage'
 Requires-Dist: pycparser==3.11; (implementation_name != 'PyPy' and platform_python_implementation != 'PyPy') and extra == 'pin-secretstorage'
 Requires-Dist: secretstorage==3.5.0; extra == 'pin-secretstorage'
-Requires-Dist: typing-extensions==4.16.0; (python_full_version < '3.11') and extra == 'pin-secretstorage'
 Provides-Extra: secretstorage
 Requires-Dist: secretstorage; extra == 'secretstorage'
 Description-Content-Type: text/markdown
@@ -175,7 +171,7 @@ You can install yt-dlp using [the binaries](#release-files), [pip](https://pypi.
 File|Description
 :---|:---
 [yt-dlp](https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp)|Platform-independent [zipimport](https://docs.python.org/3/library/zipimport.html) binary. Needs Python (recommended for **Linux/BSD**)
-[yt-dlp.exe](https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.exe)|Windows (Win8+) standalone x64 binary (recommended for **Windows**)
+[yt-dlp.exe](https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.exe)|Windows (Win10+) standalone x64 binary (recommended for **Windows**)
 [yt-dlp_macos](https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_macos)|Universal MacOS (10.15+) standalone executable (recommended for **MacOS**)
 
 #### Alternatives
@@ -191,11 +187,11 @@ File|Description
 [yt-dlp_musllinux.zip](https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_musllinux.zip)|Unpackaged Linux (musl 1.2+) x86_64 executable (no auto-update)
 [yt-dlp_musllinux_aarch64](https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_musllinux_aarch64)|Linux (musl 1.2+) standalone aarch64 binary
 [yt-dlp_musllinux_aarch64.zip](https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_musllinux_aarch64.zip)|Unpackaged Linux (musl 1.2+) aarch64 executable (no auto-update)
-[yt-dlp_x86.exe](https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_x86.exe)|Windows (Win8+) standalone x86 (32-bit) binary
-[yt-dlp_win_x86.zip](https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_win_x86.zip)|Unpackaged Windows (Win8+) x86 (32-bit) executable (no auto-update)
+[yt-dlp_x86.exe](https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_x86.exe)|Windows (Win10+) standalone x86 (32-bit) binary
+[yt-dlp_win_x86.zip](https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_win_x86.zip)|Unpackaged Windows (Win10+) x86 (32-bit) executable (no auto-update)
 [yt-dlp_arm64.exe](https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_arm64.exe)|Windows (Win10+) standalone ARM64 binary
 [yt-dlp_win_arm64.zip](https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_win_arm64.zip)|Unpackaged Windows (Win10+) ARM64 executable (no auto-update)
-[yt-dlp_win.zip](https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_win.zip)|Unpackaged Windows (Win8+) x64 executable (no auto-update)
+[yt-dlp_win.zip](https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_win.zip)|Unpackaged Windows (Win10+) x64 executable (no auto-update)
 [yt-dlp_macos.zip](https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_macos.zip)|Unpackaged MacOS (10.15+) executable (no auto-update)
 
 #### Misc
@@ -273,7 +269,7 @@ When running a yt-dlp version that is older than 90 days, you will see a warning
 You can suppress this warning by adding `--no-update` to your command or configuration file.
 
 ## DEPENDENCIES
-Python versions 3.10+ (CPython) and 3.11+ (PyPy) are supported. Other versions and implementations may or may not work correctly.
+Python versions 3.11+ (CPython and PyPy) are supported. Other versions and implementations may or may not work correctly.
 
 <!-- Python 3.5+ uses VC++14 and it is already embedded in the binary created
 <!x-- https://www.microsoft.com/en-us/download/details.aspx?id=26999 --x>
@@ -355,7 +351,7 @@ On some systems, you may need to use `py` or `python3` instead of `python`.
 **Important**: Running `pyinstaller` directly **instead of** using `python -m bundle.pyinstaller` is **not** officially supported. This may or may not work correctly.
 
 ### Platform-independent Binary (UNIX)
-You will need the build tools `python` (3.10+), `zip`, `make` (GNU), `pandoc`\* and `pytest`\*.
+You will need the build tools `python` (3.11+), `zip`, `make` (GNU), `pandoc`\* and `pytest`\*.
 
 After installing these, simply run `make`.
 
@@ -2393,7 +2389,7 @@ Features marked with a **\*** have been back-ported to youtube-dl
 
 Some of yt-dlp's default options are different from that of youtube-dl and youtube-dlc:
 
-* yt-dlp supports only [Python 3.10+](## "Windows 8"), and will remove support for more versions as they [become EOL](https://devguide.python.org/versions/#python-release-cycle); while [youtube-dl still supports Python 2.6+ and 3.2+](https://github.com/ytdl-org/youtube-dl/issues/30568#issue-1118238743)
+* yt-dlp supports only [Python 3.11+](#dependencies), and will remove support for more versions as they [become EOL](https://devguide.python.org/versions/#python-release-cycle); while [youtube-dl still supports Python 2.6+ and 3.2+](https://github.com/ytdl-org/youtube-dl/issues/30568#issue-1118238743)
 * Some options no longer work. See [removed options](#removed) for details
 * `avconv` is not supported as an alternative to `ffmpeg`
 * yt-dlp stores config files in slightly different locations to youtube-dl. See [CONFIGURATION](#configuration) for a list of correct locations
