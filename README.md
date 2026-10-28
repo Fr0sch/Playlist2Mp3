@@ -76,6 +76,12 @@ A full Qt (PySide6) desktop app for Windows, Linux and macOS — same core as th
 CLI and TUI, just a graphical frontend. Paste a URL, **Load**, tick the tracks,
 choose options and **Download**.
 
+**On Windows nothing has to be built or installed:** the repo already contains
+the built app — `playlist2mp3-gui.exe` together with the `bin\` folder holding
+`yt-dlp`, `ffmpeg`, `ffprobe` and `spotdl`. Clone or download the repo and
+double-click the exe (see `README-Windows.txt`). The same bundle is attached to
+every release.
+
 The Windows release is 100 % plug-and-play: `yt-dlp`, `ffmpeg`, `ffprobe` and
 `spotdl` are bundled in the zip's `bin\` folder (the app finds them next to
 itself), so nothing has to be installed on Windows 11. The Linux build still

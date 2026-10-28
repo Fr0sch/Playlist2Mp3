@@ -26,6 +26,14 @@ $BIN = Join-Path $STAGE "bin"
 $VENV = Join-Path $ROOT ".build-venv"
 $PY = Join-Path $VENV "Scripts\python.exe"
 
+# FFmpeg for Windows: the LGPL *shared* build of a released branch, not the GPL
+# static one. Its DLLs keep every single file well under 100 MiB, which matters
+# because this bundle is committed to the repo (playlist2mp3-gui.exe + bin/) and
+# GitHub rejects files above that; it also shrinks the release zip by ~130 MB.
+# libmp3lame is in the LGPL build, which is all the app uses it for. Pin the
+# branch: "latest" only selects the rolling build of that branch.
+$FFMPEG_URL = "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-n9.0-latest-win64-lgpl-shared-9.0.zip"
+
 Write-Host "==> Building playlist2mp3 $VERSION for Windows"
 
 if (-not (Test-Path $PY)) {
@@ -57,14 +65,12 @@ Invoke-WebRequest -UseBasicParsing `
     -Uri "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.exe" `
     -OutFile (Join-Path $BIN "yt-dlp.exe")
 
-Write-Host "==> Downloading ffmpeg + ffprobe"
+Write-Host "==> Downloading ffmpeg + ffprobe (LGPL shared build)"
 $TMP = Join-Path ([System.IO.Path]::GetTempPath()) ("p2m-ffmpeg-" + [guid]::NewGuid().ToString("N"))
 New-Item -ItemType Directory -Force $TMP | Out-Null
 try {
     $FFMPEG_ZIP = Join-Path $TMP "ffmpeg.zip"
-    Invoke-WebRequest -UseBasicParsing `
-        -Uri "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip" `
-        -OutFile $FFMPEG_ZIP
+    Invoke-WebRequest -UseBasicParsing -Uri $FFMPEG_URL -OutFile $FFMPEG_ZIP
     Expand-Archive -Path $FFMPEG_ZIP -DestinationPath $TMP -Force
 
     $FFMPEG = Get-ChildItem -Path $TMP -Recurse -Filter "ffmpeg.exe" | Select-Object -First 1
@@ -75,7 +81,14 @@ try {
     Copy-Item $FFMPEG.FullName $BIN
     Copy-Item $FFPROBE $BIN
 
-    # GPL compliance: ship the license text that comes with the build.
+    # A shared build: ffmpeg.exe and ffprobe.exe are thin and load the av* /
+    # sw* DLLs from their own folder, so they ship next to them (no ffplay).
+    Get-ChildItem -Path $FFMPEG.Directory.FullName -Filter "*.dll" | Copy-Item -Destination $BIN
+    if (-not (Get-ChildItem -Path $BIN -Filter "avcodec-*.dll")) {
+        throw "the FFmpeg archive has no shared libraries"
+    }
+
+    # LGPL compliance: ship the license text that comes with the build.
     $LICENSE = Get-ChildItem -Path $TMP -Recurse -Include "LICENSE.txt", "LICENSE" |
         Select-Object -First 1
     if ($LICENSE) { Copy-Item $LICENSE.FullName (Join-Path $BIN "ffmpeg-LICENSE.txt") }
@@ -124,11 +137,21 @@ Notes
   enough; no API keys are needed.
 - Keep the exe next to the bin folder. If you move the exe, move the whole
   folder.
-- ffmpeg is licensed under the GPL; see bin\ffmpeg-LICENSE.txt.
+- ffmpeg is licensed under the LGPL v3 (shared libraries); see
+  bin\ffmpeg-LICENSE.txt.
 
 Source: https://github.com/Fr0sch/Playlist2Mp3
 "@
 Set-Content -Path (Join-Path $STAGE "README.txt") -Value $README -Encoding UTF8
+
+# The same bundle is committed to the repo (playlist2mp3-gui.exe + bin/), and
+# GitHub rejects any file above 100 MiB. Fail early instead of at push time.
+$LIMIT = 95MB
+$tooBig = Get-ChildItem -Recurse -File $STAGE | Where-Object { $_.Length -gt $LIMIT }
+if ($tooBig) {
+    $tooBig | ForEach-Object { Write-Host ("  {0:N1} MB  {1}" -f ($_.Length / 1MB), $_.FullName) }
+    throw "a file above $([int]($LIMIT / 1MB)) MB cannot be committed to GitHub; pick a smaller FFmpeg build"
+}
 
 $ZIP = Join-Path $ROOT "dist\$STAGE_NAME.zip"
 Remove-Item -Force $ZIP -ErrorAction SilentlyContinue

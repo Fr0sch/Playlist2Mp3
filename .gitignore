@@ -4,8 +4,10 @@ dist/
 *.spec.bak
 __pycache__/
 
-# Prebuilt binaries are published as GitHub Release assets, not committed.
-playlist2mp3-gui
-playlist2mp3-gui.exe
-playlist2mp3-gui-linux
+# Local builds. The Windows build is the exception: playlist2mp3-gui.exe and
+# bin/ are committed at the repo root so a plain repo download runs on Windows
+# as is (see README-Windows.txt). Those two are rebuilt and committed by
+# packaging/build_windows.ps1, so do not add them here.
+/playlist2mp3-gui
+/playlist2mp3-gui-linux
 *.tar.gz
